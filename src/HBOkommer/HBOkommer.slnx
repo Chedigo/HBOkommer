@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../Api/HBOkommer.api/HBOkommer.api.csproj" Id="2a463da1-b814-4965-b9a5-f9b06a9a7552" />
+  <Project Path="../Shared/HBOkommer.shared/HBOkommer.shared.csproj" Id="8cb7e33a-563b-41e9-951c-127dc2b31df9" />
+  <Project Path="../Worker/HBOkommer.worker/HBOkommer.worker.csproj" Id="fbd69335-919a-4b87-aaa4-ff2437cd8f49" />
+</Solution>
