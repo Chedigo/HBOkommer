@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using HboKommer.Shared.Contracts;
+using HboKommer.Shared.Policy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
@@ -43,14 +44,52 @@ public sealed class EventsController : ControllerBase
         // Trinn 2: Idempotens via unik index på EventId
         var inserted = await TryInsertInboundEventAsync(cs, evt);
 
-        // Vi returnerer 202 uansett; forskjellen er om det var duplikat.
+        // Trinn 3 (policy): duplikat behandles ikke videre
+        if (!inserted)
+        {
+            return Accepted(new
+            {
+                received = true,
+                duplicate = true,
+                eligible = false,
+                reasonCode = "DUPLICATE_EVENT_IGNORED",
+                evt.EventId,
+                evt.EventType
+            });
+        }
+
+        // Trinn 3 (policy): gyldighetsvindu + "pilot-samtykke"
+        var decision = EvaluatePilotPolicy(evt, DateTimeOffset.UtcNow);
+
         return Accepted(new
         {
             received = true,
-            duplicate = !inserted,
+            duplicate = false,
+            eligible = decision.Eligible,
+            reasonCode = decision.ReasonCode,
             evt.EventId,
             evt.EventType
         });
+    }
+
+    private static PolicyDecision EvaluatePilotPolicy(VisitStartedEventV1 evt, DateTimeOffset receivedAtUtc)
+    {
+        // Gyldighetsvindu (pilot): avvis hendelser som er for gamle.
+        // Dette er bevisst enkelt i Trinn 3 og kan senere flyttes til konfig.
+        var maxAge = TimeSpan.FromHours(2);
+
+        var age = receivedAtUtc - evt.OccurredAtUtc;
+        if (age > maxAge)
+            return new PolicyDecision { Eligible = false, ReasonCode = "EVENT_TOO_OLD" };
+
+        // Samtykke i pilot: Konfig/samtykke-motor kommer senere.
+        // Inntil da lar vi flyten gå videre, men vi beholder eksplisitt beslutning.
+        const bool pilotConsentGranted = true;
+
+        if (!pilotConsentGranted)
+            return new PolicyDecision { Eligible = false, ReasonCode = "CONSENT_NOT_GRANTED" };
+
+        return new PolicyDecision { Eligible = true, ReasonCode = "OK" };
     }
 
     private static async Task<bool> TryInsertInboundEventAsync(string connectionString, VisitStartedEventV1 evt)
