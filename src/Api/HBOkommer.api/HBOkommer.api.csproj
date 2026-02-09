@@ -4,7 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>f7cfedba-46b2-4e2f-8326-2f38243e476d</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\HBOkommer.shared\HBOkommer.shared.csproj" />
