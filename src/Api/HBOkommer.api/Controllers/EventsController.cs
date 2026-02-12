@@ -95,7 +95,7 @@ public sealed class EventsController : ControllerBase
             });
         }
 
-        // Fortsatt ingen SMS. Vi bekrefter bare at vi har kontaktdata.
+        // Fortsatt ingen SMS i “ekte flyt”. Vi bekrefter bare at vi har kontaktdata.
         return Accepted(new
         {
             received = true,
@@ -109,6 +109,7 @@ public sealed class EventsController : ControllerBase
             evt.EventType
         });
     }
+
 
     private static PolicyDecision EvaluatePilotPolicy(VisitStartedEventV1 evt, DateTimeOffset receivedAtUtc)
     {
