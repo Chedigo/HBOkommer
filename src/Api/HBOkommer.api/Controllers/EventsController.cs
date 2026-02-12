@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using HboKommer.Api.Services;
+using System.Data;
 using HboKommer.Shared.Contracts;
 using HboKommer.Shared.Policy;
 using Microsoft.AspNetCore.Mvc;
@@ -44,7 +45,7 @@ public sealed class EventsController : ControllerBase
         // Trinn 2: Idempotens via unik index på EventId
         var inserted = await TryInsertInboundEventAsync(cs, evt);
 
-        // Trinn 3 (policy): duplikat behandles ikke videre
+        // Trinn 3: Duplikat behandles ikke videre
         if (!inserted)
         {
             return Accepted(new
@@ -58,15 +59,52 @@ public sealed class EventsController : ControllerBase
             });
         }
 
-        // Trinn 3 (policy): gyldighetsvindu + "pilot-samtykke"
-        var decision = EvaluatePilotPolicy(evt, DateTimeOffset.UtcNow);
+        // Trinn 3: Policykontroll
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var decision = EvaluatePilotPolicy(evt, receivedAtUtc);
 
+        // Hvis policy sier NEI, gjør vi ikke kontaktoppslag
+        if (!decision.Eligible)
+        {
+            return Accepted(new
+            {
+                received = true,
+                duplicate = false,
+                eligible = false,
+                reasonCode = decision.ReasonCode,
+                evt.EventId,
+                evt.EventType
+            });
+        }
+
+        // Trinn 4: Kontaktoppslag (mapping-tabell)
+        var resolver = new ContactResolver();
+        var contact = await resolver.TryResolveAsync(cs, evt.SubjectRef);
+
+        if (!contact.Found)
+        {
+            return Accepted(new
+            {
+                received = true,
+                duplicate = false,
+                eligible = false,
+                reasonCode = "CONTACT_NOT_FOUND",
+                hasContact = false,
+                evt.EventId,
+                evt.EventType
+            });
+        }
+
+        // Fortsatt ingen SMS. Vi bekrefter bare at vi har kontaktdata.
         return Accepted(new
         {
             received = true,
             duplicate = false,
-            eligible = decision.Eligible,
-            reasonCode = decision.ReasonCode,
+            eligible = true,
+            reasonCode = "OK",
+            hasContact = true,
+            contactSource = contact.Source,
+            phoneE164 = contact.PhoneE164, // OK i pilot/test; kan fjernes senere
             evt.EventId,
             evt.EventType
         });
@@ -74,23 +112,29 @@ public sealed class EventsController : ControllerBase
 
     private static PolicyDecision EvaluatePilotPolicy(VisitStartedEventV1 evt, DateTimeOffset receivedAtUtc)
     {
-        // Gyldighetsvindu (pilot): avvis hendelser som er for gamle.
-        // Dette er bevisst enkelt i Trinn 3 og kan senere flyttes til konfig.
+        // 1) Gyldighetsvindu (pilot): avvis hendelser som er for gamle
         var maxAge = TimeSpan.FromHours(2);
-
         var age = receivedAtUtc - evt.OccurredAtUtc;
+
         if (age > maxAge)
             return new PolicyDecision { Eligible = false, ReasonCode = "EVENT_TOO_OLD" };
 
-        // Samtykke i pilot: Konfig/samtykke-motor kommer senere.
-        // Inntil da lar vi flyten gå videre, men vi beholder eksplisitt beslutning.
-        const bool pilotConsentGranted = true;
-
-        if (!pilotConsentGranted)
+        // 2) Samtykke (pilot-stub)
+        // TODO (senere trinn): erstatt HasConsent(...) med reell samtykke-/policy-motor
+        // basert på kommunal autoritativ kilde / konfigurasjon.
+        if (!HasConsent(evt.MunicipalityId, evt.UnitId, evt.SubjectRef))
             return new PolicyDecision { Eligible = false, ReasonCode = "CONSENT_NOT_GRANTED" };
 
         return new PolicyDecision { Eligible = true, ReasonCode = "OK" };
     }
+
+    private static bool HasConsent(string municipalityId, string unitId, string subjectRef)
+    {
+        // PILOT: samtykke antas OK for å la flyten gå videre i testmiljø.
+        // Senere: slå opp samtykke eksplisitt (ikke default-true i prod).
+        return true;
+    }
+
 
     private static async Task<bool> TryInsertInboundEventAsync(string connectionString, VisitStartedEventV1 evt)
     {
@@ -118,7 +162,6 @@ VALUES (@EventId, @EventType, @MunicipalityId, @UnitId, @SubjectRef, @OccurredAt
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
-            // 2601/2627 = unique index/constraint violation => EventId finnes allerede
             return false; // duplicate
         }
     }
