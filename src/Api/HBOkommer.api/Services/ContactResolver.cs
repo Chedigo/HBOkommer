@@ -1,6 +1,6 @@
 ﻿using Microsoft.Data.SqlClient;
 
-namespace HboKommer.Api.Services;
+namespace HBOkommer.Api.Services;
 
 public sealed class ContactResolver
 {

@@ -1,21 +1,23 @@
-﻿using HboKommer.Api.Services;
+﻿using HBOkommer.Api.Services;
 using System.Data;
-using HboKommer.Shared.Contracts;
-using HboKommer.Shared.Policy;
+using HBOkommer.Shared.Contracts;
+using HBOkommer.Shared.Policy;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
-namespace HboKommer.Api.Controllers;
+namespace HBOkommer.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/events")]
 public sealed class EventsController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly IEventPolicyEvaluator _policy;
 
-    public EventsController(IConfiguration config)
+    public EventsController(IConfiguration config, IEventPolicyEvaluator policy)
     {
         _config = config;
+        _policy = policy;
     }
 
     [HttpPost("visit-started")]
@@ -61,7 +63,7 @@ public sealed class EventsController : ControllerBase
 
         // Trinn 3: Policykontroll
         var receivedAtUtc = DateTimeOffset.UtcNow;
-        var decision = EvaluatePilotPolicy(evt, receivedAtUtc);
+        var decision = _policy.Evaluate(evt, receivedAtUtc);
 
         // Hvis policy sier NEI, gjør vi ikke kontaktoppslag
         if (!decision.Eligible)
@@ -108,32 +110,6 @@ public sealed class EventsController : ControllerBase
             evt.EventId,
             evt.EventType
         });
-    }
-
-
-    private static PolicyDecision EvaluatePilotPolicy(VisitStartedEventV1 evt, DateTimeOffset receivedAtUtc)
-    {
-        // 1) Gyldighetsvindu (pilot): avvis hendelser som er for gamle
-        var maxAge = TimeSpan.FromHours(2);
-        var age = receivedAtUtc - evt.OccurredAtUtc;
-
-        if (age > maxAge)
-            return new PolicyDecision { Eligible = false, ReasonCode = "EVENT_TOO_OLD" };
-
-        // 2) Samtykke (pilot-stub)
-        // TODO (senere trinn): erstatt HasConsent(...) med reell samtykke-/policy-motor
-        // basert på kommunal autoritativ kilde / konfigurasjon.
-        if (!HasConsent(evt.MunicipalityId, evt.UnitId, evt.SubjectRef))
-            return new PolicyDecision { Eligible = false, ReasonCode = "CONSENT_NOT_GRANTED" };
-
-        return new PolicyDecision { Eligible = true, ReasonCode = "OK" };
-    }
-
-    private static bool HasConsent(string municipalityId, string unitId, string subjectRef)
-    {
-        // PILOT: samtykke antas OK for å la flyten gå videre i testmiljø.
-        // Senere: slå opp samtykke eksplisitt (ikke default-true i prod).
-        return true;
     }
 
 

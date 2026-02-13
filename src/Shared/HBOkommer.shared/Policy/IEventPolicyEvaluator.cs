@@ -1,6 +1,6 @@
-﻿using HboKommer.Shared.Contracts;
+﻿using HBOkommer.Shared.Contracts;
 
-namespace HboKommer.Shared.Policy;
+namespace HBOkommer.Shared.Policy;
 
 public interface IEventPolicyEvaluator
 {

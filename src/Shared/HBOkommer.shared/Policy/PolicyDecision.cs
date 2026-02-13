@@ -1,4 +1,4 @@
-﻿namespace HboKommer.Shared.Policy;
+﻿namespace HBOkommer.Shared.Policy;
 
 public sealed class PolicyDecision
 {

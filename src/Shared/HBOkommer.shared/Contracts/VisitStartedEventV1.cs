@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace HboKommer.Shared.Contracts;
+namespace HBOkommer.Shared.Contracts;
 
 /// <summary>
 /// Event Contract V1 - minimal identitet + tidspunkt.
